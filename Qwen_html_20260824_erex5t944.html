@@ -47,6 +47,8 @@ main{position:relative;z-index:1;padding:66px 18px 40px;max-width:1560px;margin:
 .menu-sub{margin:14px 0 20px;font-size:11px;letter-spacing:3px;color:var(--dim)}.menu-sub .cur{display:inline-block;width:8px;height:13px;background:var(--acc);vertical-align:-2px;animation:blink 1s steps(2) infinite}
 .m-stats{display:flex;gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:26px}.m-stats div{flex:1;background:#1e1e1e;padding:10px 12px}
 .m-stats span{display:block;font-size:9px;letter-spacing:2px;color:var(--dim)}.m-stats b{font-size:15px;color:var(--acc)}
+.m-stats .warn{color:var(--bad)}.m-stats .ok{color:var(--good)}
+.m-stats .stamina-bar{height:4px;background:#161616;margin-top:4px;border-radius:2px;overflow:hidden}.m-stats .stamina-bar i{display:block;height:100%;background:var(--good);transition:width 0.3s ease}.m-stats .stamina-bar i.low{background:var(--bad)}.m-stats .stamina-bar i.warn{background:var(--acc)}
 .m-btns{display:flex;flex-direction:column;gap:12px}.m-btns .btn{opacity:0;animation:mIn .4s ease forwards;position:relative;overflow:hidden}
 .m-btns .btn:nth-child(1){animation-delay:.08s}.m-btns .btn:nth-child(2){animation-delay:.18s}.m-btns .btn:nth-child(3){animation-delay:.28s}.m-btns .btn:nth-child(4){animation-delay:.38s}
 @keyframes mIn{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
@@ -180,12 +182,12 @@ main{position:relative;z-index:1;padding:66px 18px 40px;max-width:1560px;margin:
       <div class="m-top"><span>СИСТЕМА // СБОРКА 3.1</span><span class="ok" id="m-status">ГОТОВ</span></div>
       <h1 class="menu-title">TACTICAL<br>LOOTING<br>SYSTEM</h1>
       <p class="menu-sub">ОБЫСК ТЕЛ · ГРУППЫ ЧВК · ЖЕТОНЫ · КОНТЕЙНЕРЫ <span class="cur"></span></p>
-      <div class="m-stats"><div><span>БАЛАНС</span><b id="m-money">100 000 ₽</b></div><div><span>СХРОН</span><b id="m-stash">0 ₽</b></div><div><span>ЖЕТОНЫ</span><b id="m-tags">0</b></div><div><span>РЕЙДОВ</span><b id="m-raids">0</b></div></div>
+      <div class="m-stats"><span>БАЛАНС</span><b id="m-money">100 000 ₽</b></div><div><span>СХРОН</span><b id="m-stash">0 ₽</b></div><div><span>ЖЕТОНЫ</span><b id="m-tags">0</b></div><div><span>РЕЙДОВ</span><b id="m-raids">0</b></div><div><span>ВЕС</span><b id="m-weight">0.0 КГ</b></div><div><span>ВЫНОСЛ</span><b id="m-stamina">100%</b><div class="stamina-bar" id="stamina-bar-wrap"><i id="stamina-bar" style="width:100%"></i></div></div>
       <div class="m-btns">
         <button class="btn btn-acc big" id="btn-raid"><span class="ico">⚔️</span> ВЫЙТИ В РЕЙД <small>3–7 ТЕЛ ЧВК · 5 МИН НА ТЕЛО</small></button>
         <button class="btn big" id="btn-stash"><span class="ico">📦</span> ОТКРЫТЬ СХРОН <small>ЭКИПИРОВКА + СКЛАД</small></button>
         <button class="btn big" id="btn-trader"><span class="ico">🛒</span> ТОРГОВЕЦ <small>ПОКУПКА / ПРОДАЖА</small></button>
-        <button class="btn big" id="btn-upg"><span class="ico">🔧</span> УЛУЧШЕНИЯ <small>ОБЫСК · ВРЕМЯ · СХРОН · ТОРГОВЛЯ</small></button>
+        <button class="btn big" id="btn-upg"><span class="ico">🔧</span> УЛУЧШЕНИЯ <small>ОБЫСК · ВРЕМЯ · СХРОН · ТОРГОВЛЯ · ВЫНОСЛ</small></button>
       </div>
       <div class="legend" id="legend-menu"></div>
       <div id="ticker"></div>
@@ -380,17 +382,22 @@ const PLAYER=makeSide();sideSlots(PLAYER).forEach(c=>c.raid=false);
 const STASH={id:'stash',cols:10,rows:8,cell:45,items:[],accept:['any'],mounts:[],label:'СХРОН'};CONT_REG.push(STASH);
 function mkItem(def){const it={uid:UID++,def,w:def.w,h:def.h,row:0,col:0,container:null};if(def.cap){it.container={id:'bag'+(CID++),cols:def.cap.c,rows:def.cap.r,cell:40,items:[],accept:['any'],mounts:[],label:def.short,ownerItem:it};CONT_REG.push(it.container);}return it;}
 let money=100000,lastMoney=100000,screen='menu',raids=0,raidActive=false,timerId=null,searchInt=null,ENEMIES=[],cur=0,drag=null,sellArm=null,pc=null,AC=null;
+let stamina=100,maxStamina=100,staminaDrain=0.8,staminaRegen=0.4,maxWeight=60,weightPenalty=25;
 const $=id=>document.getElementById(id);const fmt=n=>n.toLocaleString('ru-RU');const fmtS=t=>String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')+':'+String(Math.max(0,t)%60).padStart(2,'0');
 const UPG_DEF=[
  {id:'search',icon:'🔍',name:'БЫСТРЫЙ ОБЫСК',desc:'Сокращает время обыска тела',vals:['8 СЕК','6 СЕК','4 СЕК','2.5 СЕК'],cost:[50000,120000,250000]},
  {id:'time',icon:'⏱️',name:'АДРЕНАЛИН',desc:'Больше времени на каждое тело',vals:['5:00','6:00','7:00','8:00'],cost:[60000,150000,300000]},
  {id:'stash',icon:'📦',name:'РАСШИРЕНИЕ СХРОНА',desc:'Дополнительные ряды схрона',vals:['10×8','10×9','10×10'],cost:[80000,200000]},
- {id:'trade',icon:'🤝',name:'ТОРГОВАЯ ЖИЛКА',desc:'Торговец платит больше за ваш лут',vals:['×1.00','×1.10','×1.25'],cost:[100000,250000]}
+ {id:'trade',icon:'🤝',name:'ТОРГОВАЯ ЖИЛКА',desc:'Торговец платит больше за ваш лут',vals:['×1.00','×1.10','×1.25'],cost:[100000,250000]},
+ {id:'stamina',icon:'💪',name:'ВЫНОСЛИВОСТЬ',desc:'Увеличивает максимальный вес',vals:['60 КГ','75 КГ','90 КГ','105 КГ'],cost:[40000,90000,180000]},
+ {id:'efficiency',icon:'⚡',name:'ЭФФЕКТИВНОСТЬ',desc:'Меньше расход выносливости',vals:['100%','85%','70%','55%'],cost:[55000,130000,280000]}
 ];
-let UPG={search:0,time:0,stash:0,trade:0};
+let UPG={search:0,time:0,stash:0,trade:0,stamina:0,efficiency:0};
 const searchTime=()=>[8,6,4,2.5][UPG.search];
 const bodyTime=()=>[300,360,420,480][UPG.time];
 const sellMult=()=>[1,1.1,1.25][UPG.trade];
+const maxWeightBase=()=>[60,75,90,105][UPG.stamina];
+const staminaDrainMult=()=>[1,0.85,0.70,0.55][UPG.efficiency];
 const sellVal=it=>Math.round(it.def.price*sellMult());
 function sfx(type){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);const P={pick:[340,520,.06,'square',.05],drop:[260,150,.08,'square',.06],err:[150,90,.14,'sawtooth',.06],cash:[660,880,.12,'triangle',.08],ui:[300,340,.05,'square',.04],tick:[980,980,.04,'square',.03]}[type];o.type=P[3];o.frequency.setValueAtTime(P[0],t);o.frequency.exponentialRampToValueAtTime(P[1],t+P[2]);g.gain.setValueAtTime(P[4],t);g.gain.exponentialRampToValueAtTime(.0001,t+P[2]);o.start(t);o.stop(t+P[2]+.02);}catch(e){}}
 function toast(msg,type){const pre=type==='ok'?'✔ ':type==='err'?'✖ ':'» ';const d=document.createElement('div');d.className='toast '+(type||'');d.textContent=pre+msg;$('toasts').appendChild(d);setTimeout(()=>d.classList.add('out'),2300);setTimeout(()=>d.remove(),2650);}
@@ -460,9 +467,18 @@ function buildRaidUI(){unmountOwner('rp');unmountOwner('re');buildSideDOM($('p-b
 function buildStashUI(){unmountOwner('sp');buildSideDOM($('sp-body'),PLAYER,'sp');}
 function stashStats(){let v=0,w=0;walkItems(STASH,it=>{v+=it.def.price;w+=it.def.weight;});return{v,n:STASH.items.length,w};}
 function dogtagCount(){let n=0;walkItems(STASH,it=>{if(it.def.dogtag)n++;});return n;}
+function getPlayerWeight(){let pw=0;sideSlots(PLAYER).forEach(c=>walkItems(c,it=>pw+=it.def.weight));return pw;}
+function updateStaminaParams(){maxWeight=maxWeightBase();staminaDrain=0.8*staminaDrainMult();}
+function updateStaminaUI(){const w=getPlayerWeight();updateStaminaParams();const over=w>maxWeight;const drain=over?staminaDrain*2:staminaDrain;
+ if(raidActive&&screen==='raid'){stamina=Math.max(0,stamina-drain/10);}else{stamina=Math.min(maxStamina,stamina+staminaRegen/10);}
+ const pct=Math.round(stamina);$('m-stamina').textContent=pct+'%';$('m-stamina').className=pct<30?'warn':pct>70?'ok':'';
+ $('m-weight').textContent=w.toFixed(1)+' КГ';$('m-weight').className=w>maxWeight?'warn':w>maxWeight*0.8?'warn':'ok';
+ $('p-w').textContent='ВЕС: '+w.toFixed(1)+' КГ';$('sp-w').textContent='ВЕС: '+w.toFixed(1)+' КГ';
+ const bar=$('stamina-bar');if(bar){bar.style.width=pct+'%';bar.className=pct<30?'low':pct<70?'warn':'ok';}
+ if(w>maxWeight && raidActive && screen==='raid' && Math.random()<0.05){toast('ПЕРЕГРУЗ! ВЫНОСЛИВОСТЬ ПАДАЕТ','err');}}
 function updateHUD(){const mEl=$('hud-money');mEl.textContent=fmt(money)+' ₽';
  if(money!==lastMoney){mEl.classList.remove('mg','mr');void mEl.offsetWidth;mEl.classList.add(money>lastMoney?'mg':'mr');lastMoney=money;}
- $('hud-raids').textContent='РЕЙДОВ: '+raids;let pw=0;sideSlots(PLAYER).forEach(c=>walkItems(c,it=>pw+=it.def.weight));$('p-w').textContent='ВЕС: '+pw.toFixed(1)+' КГ';$('sp-w').textContent='ВЕС: '+pw.toFixed(1)+' КГ';const s=stashStats();$('s-meta').textContent=s.n+' / '+(STASH.cols*STASH.rows)+' · '+fmt(s.v)+' ₽';$('s-tag').textContent=STASH.cols+'×'+STASH.rows;if(ENEMIES.length)$('r-idx').textContent='ТЕЛО '+(cur+1)+'/'+ENEMIES.length;}
+ $('hud-raids').textContent='РЕЙДОВ: '+raids;updateStaminaUI();const s=stashStats();$('s-meta').textContent=s.n+' / '+(STASH.cols*STASH.rows)+' · '+fmt(s.v)+' ₽';$('s-tag').textContent=STASH.cols+'×'+STASH.rows;if(ENEMIES.length)$('r-idx').textContent='ТЕЛО '+(cur+1)+'/'+ENEMIES.length;}
 function renderAll(){if(!drag){if(screen==='raid'&&ENEMIES[cur])buildRaidUI();else if(screen==='stash')buildStashUI();}renderAllMounts();updateHUD();if(screen==='trader')renderTrader();}
 const SCREEN_NAMES={menu:'ГЛАВНОЕ МЕНЮ',raid:'// РЕЙД',stash:'// СХРОН',trader:'// ТОРГОВЕЦ',upg:'// УЛУЧШЕНИЯ'};
 function showScreen(name){screen=name;document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$('screen-'+name).classList.add('active');$('hud-screen').textContent=SCREEN_NAMES[name];$('hud-live').classList.toggle('on',name==='raid');if(name!=='raid')document.body.classList.remove('lowtime');if(name==='menu'){$('m-money').textContent=fmt(money)+' ₽';$('m-raids').textContent=raids;$('m-stash').textContent=fmt(stashStats().v)+' ₽';$('m-tags').textContent=dogtagCount();$('m-status').textContent=raidActive?'РЕЙД ПРЕРВАН':'ГОТОВ';}if(name==='upg')renderUpg();renderAll();}
@@ -560,9 +576,9 @@ function startSearch(){
      toast('ТЕЛО «'+e.name+'» ОБЫСКАНО','ok');sfx('drop');
      buildTabs();renderAll();}
  },100);}
-function startRaid(){if(raidActive)return;ENEMIES=[];const n=rint(3,7);for(let i=0;i<n;i++)ENEMIES.push(genBody());cur=0;raids++;raidActive=true;document.body.classList.remove('lowtime');buildTabs();showScreen('raid');toast('ОБНАРУЖЕНА ГРУППА ЧВК: '+n+' ТЕЛ. ОБЫЩИТЕ ИХ.','ok');clearInterval(timerId);timerId=setInterval(()=>{if(!raidActive)return;const e=ENEMIES[cur];if(!e||!e.searched||e.locked)return;e.timeLeft--;$('t-time').textContent=fmtS(e.timeLeft);const bar=$('t-bar');bar.style.width=(e.timeLeft/bodyTime()*100)+'%';const tt=$('tt'+cur);if(tt)tt.textContent=fmtS(e.timeLeft);if(e.timeLeft<=10){$('t-time').classList.add('danger');bar.classList.add('low');document.body.classList.add('lowtime');sfx('tick');}else{$('t-time').classList.remove('danger');bar.classList.remove('low');document.body.classList.remove('lowtime');}if(e.timeLeft<=0){e.locked=true;sfx('err');toast('⏱ «'+e.name+'»: ВРЕМЯ ВЫШЛО — ДВИГАЙ ДАЛЬШЕ','err');document.body.classList.remove('lowtime');const ni=ENEMIES.findIndex(x=>!x.locked);if(ni<0){endRaid(true);}else{cur=ni;buildTabs();renderAll();}}},1000);}
+function startRaid(){if(raidActive)return;ENEMIES=[];const n=rint(3,7);for(let i=0;i<n;i++)ENEMIES.push(genBody());cur=0;raids++;raidActive=true;stamina=100;document.body.classList.remove('lowtime');buildTabs();showScreen('raid');toast('ОБНАРУЖЕНА ГРУППА ЧВК: '+n+' ТЕЛ. ОБЫЩИТЕ ИХ.','ok');clearInterval(timerId);timerId=setInterval(()=>{if(!raidActive)return;const e=ENEMIES[cur];if(!e||!e.searched||e.locked)return;e.timeLeft--;$('t-time').textContent=fmtS(e.timeLeft);const bar=$('t-bar');bar.style.width=(e.timeLeft/bodyTime()*100)+'%';const tt=$('tt'+cur);if(tt)tt.textContent=fmtS(e.timeLeft);if(e.timeLeft<=10){$('t-time').classList.add('danger');bar.classList.add('low');document.body.classList.add('lowtime');sfx('tick');}else{$('t-time').classList.remove('danger');bar.classList.remove('low');document.body.classList.remove('lowtime');}if(e.timeLeft<=0){e.locked=true;sfx('err');toast('⏱ «'+e.name+'»: ВРЕМЯ ВЫШЛО — ДВИГАЙ ДАЛЬШЕ','err');document.body.classList.remove('lowtime');const ni=ENEMIES.findIndex(x=>!x.locked);if(ni<0){endRaid(true);}else{cur=ni;buildTabs();renderAll();}}},1000);}
 /* ИСПРАВЛЕНО: снаряжение НЕ переносится в схрон, а остаётся на персонаже */
-function endRaid(auto){if(!raidActive)return;raidActive=false;clearInterval(timerId);cancelSearch();document.body.classList.remove('lowtime');
+function endRaid(auto){if(!raidActive)return;raidActive=false;clearInterval(timerId);cancelSearch();document.body.classList.remove('lowtime');stamina=Math.max(0,stamina-20);
  let got=0,val=0,wt=0,tags=0;
  sideSlots(PLAYER).forEach(c=>{walkItems(c,it=>{got++;val+=it.def.price;wt+=it.def.weight;if(it.def.dogtag)tags++;});});
  const s=stashStats();
@@ -581,7 +597,7 @@ function renderUpg(){const host=$('upg-list');host.innerHTML='';UPG_DEF.forEach(
  const b=document.createElement('button');
  if(isMax){b.className='btn';b.disabled=true;b.textContent='МАКСИМУМ';}
  else{const cost=u.cost[lvl];b.className='btn btn-acc';b.textContent='УЛУЧШИТЬ · '+fmt(cost)+' ₽';
-   b.onclick=()=>{if(money<cost){toast('НЕДОСТАТОЧНО СРЕДСТВ','err');sfx('err');return;}
+    b.onclick=()=>{if(money<cost){toast('НЕДОСТАТОЧНО СРЕДСТВ','err');sfx('err');return;}
      money-=cost;UPG[u.id]++;
      if(u.id==='stash'){STASH.rows=[8,9,10][UPG.stash];STASH.mounts.forEach(m=>m.el.style.height=STASH.rows*STASH.cell+'px');}
      floatText('−'+fmt(cost)+' ₽','#f44336');sfx('cash');toast('УЛУЧШЕНО: '+u.name,'ok');renderUpg();updateHUD();};}
