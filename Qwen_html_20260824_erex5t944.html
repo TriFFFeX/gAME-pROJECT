@@ -404,6 +404,8 @@ function toast(msg,type){const pre=type==='ok'?'✔ ':type==='err'?'✖ ':'» ';
 function floatText(txt,color){const d=document.createElement('div');d.className='float-txt';d.textContent=txt;d.style.color=color||'#ffd54f';document.body.appendChild(d);requestAnimationFrame(()=>d.classList.add('go'));setTimeout(()=>d.remove(),950);}
 function shade(hex,amt){const n=parseInt(hex.slice(1),16);let r=(n>>16)+amt,g=((n>>8)&255)+amt,b=(n&255)+amt;r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b));return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');}
 function canPlace(c,row,col,w,h,ex){if(row<0||col<0||row+h>c.rows||col+w>c.cols)return false;for(const it of c.items){if(ex&&it.uid===ex)continue;if(row<it.row+it.h&&row+h>it.row&&col<it.col+it.w&&col+w>it.col)return false;}return true;}
+// Найти предмет в ячейках (row,col) размером w,h
+function findItemAt(c,row,col,w,h,exUid){for(const it of c.items){if(it.uid===exUid)continue;if(row<it.row+it.h&&row+h>it.row&&col<it.col+it.w&&col+w>it.col)return it;}return null;}
 function findSpot(c,w,h){for(let r=0;r<=c.rows-h;r++)for(let k=0;k<=c.cols-w;k++)if(canPlace(c,r,k,w,h,null))return{row:r,col:k};return null;}
 function catOk(c,def){return !c.accept||c.accept.indexOf('any')>=0||c.accept.indexOf(def.cat)>=0;}
 function walkItems(c,fn){c.items.forEach(it=>{fn(it);if(it.container)walkItems(it.container,fn);});}
@@ -613,8 +615,44 @@ document.addEventListener('mousemove',e=>{if(!drag)return;if(!drag.moved){if(Mat
  let pool=matches;if(ovOpen)pool=matches.filter(m=>m.el.dataset.owner==='modal');
  const best=pool.length?pool[pool.length-1]:null;
  if(best){const c=best.c,r=best.r;const col=Math.min(Math.max(0,Math.floor((e.clientX-r.left)/c.cell)),Math.max(0,c.cols-drag.w));const row=Math.min(Math.max(0,Math.floor((e.clientY-r.top)/c.cell)),Math.max(0,c.rows-drag.h));const ok=catOk(c,drag.it.def)&&canPlace(c,row,col,drag.w,drag.h,drag.it.uid)&&!nestBad(drag.it,c);for(let i=0;i<drag.h;i++)for(let j=0;j<drag.w;j++){const g=document.createElement('div');g.className='gc '+(ok?'ok':'no');g.style.left=(col+j)*c.cell+1+'px';g.style.top=(row+i)*c.cell+1+'px';g.style.width=c.cell-2+'px';g.style.height=c.cell-2+'px';best.el.appendChild(g);hlCells.push(g);}drag.target={c,row,col,ok};}});
-/* ИСПРАВЛЕНО: передаём повёрнутые размеры при дропе */
-document.addEventListener('mouseup',e=>{if(!drag)return;const d=drag;drag=null;clearHL();if(ghost){ghost.remove();ghost=null;}if(!d.moved){queueClick(d.it,d.c,d.tag,e.altKey);return;}markSrc(false);if(d.target&&d.target.ok){moveItem(d.it,d.c,d.target.c,d.target.row,d.target.col,d.w,d.h);sfx('drop');renderAll();}else{sfx('err');renderAll();}});
+/* ИСПРАВЛЕНО: передаём повёрнутые размеры при дропе и обрабатываем замену предметов в слотах */
+document.addEventListener('mouseup',e=>{if(!drag)return;const d=drag;drag=null;clearHL();if(ghost){ghost.remove();ghost=null;}if(!d.moved){queueClick(d.it,d.c,d.tag,e.altKey);return;}markSrc(false);
+if(d.target&&d.target.ok){
+  // Проверяем, есть ли в целевой ячейке другой предмет (для замены)
+  const existingItem=findItemAt(d.target.c,d.target.row,d.target.col,d.w,d.h,d.it.uid);
+  if(existingItem){
+    // Логика замены: перемещаем старый предмет в освободившееся место или в инвентарь
+    const oldIt=existingItem;
+    const oldW=oldIt.w,oldH=oldIt.h;
+    // Пытаемся найти место для старого предмета в источнике или в инвентаре
+    const fromContainers=[d.c];
+    if(d.tag==='enemy'){fromContainers.push(STASH);} // Если тащим от врага, пробуем в его лут или схрон
+    else if(d.tag==='player'){fromContainers.push(STASH);}
+    
+    let placed=false;
+    // Пробуем поставить в исходный контейнер (если это не тот же самый)
+    for(const cont of [d.target.c,d.c,STASH]){
+      const spot=findSpot(cont,oldW,oldH);
+      if(spot){
+        moveItem(oldIt,oldIt.container||findGlobal(oldIt.uid).c,cont,spot.row,spot.col,oldW,oldH);
+        placed=true;
+        break;
+      }
+      // Пробуем повернуть
+      const spot2=findSpot(cont,oldH,oldW);
+      if(spot2){
+        moveItem(oldIt,oldIt.container||findGlobal(oldIt.uid).c,cont,spot2.row,spot2.col,oldH,oldW);
+        placed=true;
+        break;
+      }
+    }
+    if(!placed){
+      // Если места нет, возвращаем старый предмет в его оригинальный контейнер (отменяем замену)
+      sfx('err');toast('НЕТ МЕСТА ДЛЯ ОБМЕНА','err');renderAll();return;
+    }
+  }
+  moveItem(d.it,d.c,d.target.c,d.target.row,d.target.col,d.w,d.h);sfx('drop');renderAll();
+}else{sfx('err');renderAll();}});
 document.addEventListener('contextmenu',e=>{if(e.target.closest('.item')||e.target.closest('.grid'))e.preventDefault();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('bag-ov').classList.contains('on')){closeBag();return;}if(drag){cancelDrag();return;}if(screen!=='menu'&&!raidActive)showScreen('menu');return;}const k=e.key.toLowerCase();if((k==='r'||k==='к')&&drag&&drag.moved){const t=drag.w;drag.w=drag.h;drag.h=t;buildGhost(drag.it,drag.w,drag.h,drag.c.cell);sfx('ui');}});
 function cancelDrag(){if(!drag)return;clearHL();if(ghost){ghost.remove();ghost=null;}drag=null;renderAll();}
