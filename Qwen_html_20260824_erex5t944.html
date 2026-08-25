@@ -627,22 +627,27 @@ function quickMove(it,c,tag){let destTag;if(screen==='raid')destTag=tag==='playe
 function onSingle(it,c,tag,alt){if(alt){quickMove(it,c,tag);return;}if(screen==='raid'){if(tag==='player'){if(it.container){toast('2×КЛИК — ОТКРЫТЬ КОНТЕЙНЕР');return;}quickMove(it,c,'player');}return;}if(screen==='stash'){if(tag==='player'){quickMove(it,c,'player');return;}if(tag==='stash'){const now=Date.now();if(sellArm&&sellArm.uid===it.uid&&now-sellArm.t<2600){if(it.container&&it.container.items.length){toast('СНАЧАЛА ВЫГРУЗИТЕ СОДЕРЖИМОЕ','err');sfx('err');return;}STASH.items.splice(STASH.items.indexOf(it),1);money+=sellVal(it);sellArm=null;floatText('+'+fmt(sellVal(it))+' ₽');sfx('cash');toast('ПРОДАНО: '+it.def.name.toUpperCase(),'ok');renderAll();}else{sellArm={uid:it.uid,t:now};sfx('ui');toast('НАЖМИТЕ ЕЩЁ РАЗ — ПРОДАТЬ ЗА '+fmt(sellVal(it))+' ₽');renderAll();}return;}}}
 function onDouble(it){if(it.container)openBag(it);}
 let bagStack=[];
-function openBag(item){bagStack.push(item);drawBag();sfx('ui');}
+let focusedContainer=null; // null = общий вид, объект = конкретный контейнер
+function openBag(item){bagStack.push(item);focusedContainer=item;drawBag();sfx('ui');}
 function drawBag(){const item=bagStack[bagStack.length-1];if(!item)return;
  unmountOwner('modal');const c=item.container;
  $('bag-title').textContent=item.def.icon+' '+item.def.name+' · '+c.cols+'×'+c.rows;
- $('bag-sub').textContent=screen==='raid'?'ПЕРЕТАСКИВАЙТЕ МЕЖДУ КОНТЕЙНЕРОМ И ВАШЕЙ ЭКИПИРОВКОЙ':'ПЕРЕТАСКИВАЙТЕ МЕЖДУ КОНТЕЙНЕРОМ И СХРОНОМ';
+ $('bag-sub').textContent=focusedContainer?'ПЕРЕТАСКИВАЙТЕ ПРЕДМЕТЫ ВНУТРИ КОНТЕЙНЕРА':(screen==='raid'?'ПЕРЕТАСКИВАЙТЕ МЕЖДУ КОНТЕЙНЕРОМ И ВАШЕЙ ЭКИПИРОВКОЙ':'ПЕРЕТАСКИВАЙТЕ МЕЖДУ КОНТЕЙНЕРОМ И СХРОНОМ');
  const g=$('bag-grid');g.innerHTML='';
  g.appendChild(slotBox(c,'СОДЕРЖИМОЕ','modal'));
- if(screen==='raid'){const wrap=document.createElement('div');wrap.className='slot';
-   const l=document.createElement('div');l.className='slot-l';l.textContent='ВАША ЭКИПИРОВКА';
+ if(screen==='raid' && !focusedContainer){
+   const wrap=document.createElement('div');wrap.className='slot';
+   const l=document.createElement('div');l.className='slot-l';l.textContent='ВСЁ СНАРЯЖЕНИЕ';
    wrap.appendChild(l);const inner=document.createElement('div');wrap.appendChild(inner);
-   buildSideDOM(inner,PLAYER,'modal');g.appendChild(wrap);
- }else{g.appendChild(slotBox(STASH,'СХРОН','modal'));}
+   buildSideDOM(inner,PLAYER,'modal');
+   g.appendChild(wrap);
+ }else if(screen==='stash' && !focusedContainer){
+   g.appendChild(slotBox(STASH,'СХРОН','modal'));
+ }
  $('bag-back').style.display=bagStack.length>1?'inline-block':'none';
  $('bag-ov').classList.add('on');renderAll();}
-function backBag(){if(bagStack.length>1){bagStack.pop();drawBag();sfx('ui');}else closeBag();}
-function closeBag(){$('bag-ov').classList.remove('on');unmountOwner('modal');bagStack=[];renderAll();}
+function backBag(){if(bagStack.length>1){bagStack.pop();focusedContainer=bagStack[bagStack.length-1];drawBag();sfx('ui');}else{closeBag();}}
+function closeBag(){$('bag-ov').classList.remove('on');unmountOwner('modal');bagStack=[];focusedContainer=null;renderAll();}
 $('bag-close').onclick=closeBag;$('bag-back').onclick=backBag;
 const tip=$('tip');
 function hideTip(){tip.classList.remove('on');}
